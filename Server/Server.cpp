@@ -46,6 +46,7 @@ void decode64(string b64, string output);
 void con_print(CConsoleLoggerEx stream, string msg);
 void print_vector(vector<char> v);
 string encode64(string filename);
+string currentDateTime();
 string base64_decode(std::string const& encoded_string);
 string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_len);
 CConsoleLoggerEx text_stream;
@@ -56,7 +57,7 @@ static inline bool is_base64(unsigned char c) {
 
 int main()
 {
-	SetConsoleTitleA("Mouse Stream");
+	SetConsoleTitleA("Connection Stream");
 	file_stream.Create("File Stream");
 	text_stream.Create("Text Stream");
 	locale swedish("swedish");
@@ -135,6 +136,7 @@ int main()
 			}
 			else
 			{
+				cout << "(" << currentDateTime() << ") -> New [Text] recvRequest: [" << string(clientIp) << "]";
 				stringstream temp;
 				temp << clientIp << " : "<< "[" << typbuf << "]" << endl; //prints ip, type and message
 				for (auto i = buf.begin(); i != buf.end(); ++i) {
@@ -239,6 +241,14 @@ void print_vector(vector<char> v) {
 			cout << *i;
 		}
 	}
+}
+
+string currentDateTime() {
+	std::time_t t = std::time(nullptr);
+	std::tm tm = *std::localtime(&t);
+	stringstream ff;
+	ff << std::put_time(&tm, "%Y-%m-%d-%H.%M.%S");
+	return ff.str();
 }
 
 string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_len) {

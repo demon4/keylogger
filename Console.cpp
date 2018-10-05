@@ -8,7 +8,6 @@
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 
-
 // CTOR: reset everything
 CConsoleLogger::CConsoleLogger()
 {
@@ -27,7 +26,6 @@ CConsoleLogger::~CConsoleLogger()
 	//Close();
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // Create: create a new console (logger) with the following OPTIONAL attributes:
 //
@@ -38,9 +36,9 @@ CConsoleLogger::~CConsoleLogger()
 // helper_executable: which (and where) is the EXE that will write the pipe's output
 //////////////////////////////////////////////////////////////////////////
 long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
-                            int buffer_size_x/*=-1*/, int buffer_size_y/*=-1*/,
-                            const char* logger_name/*=NULL*/,
-                            const char* helper_executable/*=NULL*/)
+	int buffer_size_x/*=-1*/, int buffer_size_y/*=-1*/,
+	const char* logger_name/*=NULL*/,
+	const char* helper_executable/*=NULL*/)
 {
 	// Ensure there's no pipe connected
 	if (m_hPipe != INVALID_HANDLE_VALUE)
@@ -50,7 +48,6 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 		m_hPipe = INVALID_HANDLE_VALUE;
 	}
 	strcpy(m_name, "\\\\.\\pipe\\");
-
 
 	if (!logger_name)
 	{
@@ -66,23 +63,22 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 		strcat(m_name, logger_name);
 	}
 
-
 	// Create the pipe
-	m_hPipe = CreateNamedPipe(
-		m_name, // pipe name 
+	m_hPipe = CreateNamedPipeA(
+		m_name, // pipe name
 		PIPE_ACCESS_OUTBOUND, // read/write access, we're only writing...
-		PIPE_TYPE_MESSAGE | // message type pipe 
-		PIPE_READMODE_BYTE | // message-read mode 
-		PIPE_WAIT, // blocking mode 
-		1, // max. instances  
-		4096, // output buffer size 
+		PIPE_TYPE_MESSAGE | // message type pipe
+		PIPE_READMODE_BYTE | // message-read mode
+		PIPE_WAIT, // blocking mode
+		1, // max. instances
+		4096, // output buffer size
 		0, // input buffer size (we don't read data, so 0 is fine)
-		1, // client time-out 
-		nullptr); // no security attribute 
+		1, // client time-out
+		nullptr); // no security attribute
 	if (m_hPipe == INVALID_HANDLE_VALUE)
 	{
 		// failure
-		MessageBox(nullptr, "CreateNamedPipe failed", "ConsoleLogger failed",MB_OK);
+		MessageBoxA(nullptr, "CreateNamedPipe failed", "ConsoleLogger failed", MB_OK);
 		return -1;
 	}
 
@@ -96,7 +92,7 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 		helper_executable = DEFAULT_HELPER_EXE;
 
 	sprintf(cmdline, "%s %s", helper_executable, logger_name);
-	BOOL bRet = CreateProcess(nullptr, cmdline, nullptr, nullptr,FALSE,CREATE_NEW_CONSOLE, nullptr, nullptr, &si, &pi);
+	BOOL bRet = CreateProcessA(nullptr, cmdline, nullptr, nullptr, FALSE, CREATE_NEW_CONSOLE, nullptr, nullptr, (LPSTARTUPINFOA)&si, &pi);
 	if (!bRet)
 	{
 		// on failure - try to get the path from the environment
@@ -104,23 +100,22 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 		if (path)
 		{
 			sprintf(cmdline, "%s %s", path, logger_name);
-			bRet = CreateProcess(nullptr, cmdline, nullptr, nullptr,FALSE,CREATE_NEW_CONSOLE, nullptr, nullptr, &si,
-			                     &pi);
+			bRet = CreateProcessA(nullptr, cmdline, nullptr, nullptr, FALSE, CREATE_NEW_CONSOLE, nullptr, nullptr, (LPSTARTUPINFOA)&si,
+				&pi);
 		}
 		if (!bRet)
 		{
-			MessageBox(nullptr, "Helper executable not found", "ConsoleLogger failed",MB_OK);
+			MessageBoxA(nullptr, "Helper executable not found", "ConsoleLogger failed", MB_OK);
 			CloseHandle(m_hPipe);
 			m_hPipe = INVALID_HANDLE_VALUE;
 			return -1;
 		}
 	}
 
-
 	BOOL bConnected = ConnectNamedPipe(m_hPipe, nullptr) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
 	if (!bConnected)
 	{
-		MessageBox(nullptr, "ConnectNamedPipe failed", "ConsoleLogger failed",MB_OK);
+		MessageBoxA(nullptr, "ConnectNamedPipe failed", "ConsoleLogger failed", MB_OK);
 
 		CloseHandle(m_hPipe);
 		m_hPipe = INVALID_HANDLE_VALUE;
@@ -135,7 +130,6 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 	// the last header should end with NULL
 	//////////////////////////////////////////////////////////////////////////
 
-
 	char buffer[128];
 	// Send title
 	if (!lpszWindowTitle) lpszWindowTitle = m_name + 9;
@@ -143,13 +137,12 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 	WriteFile(m_hPipe, buffer, strlen(buffer), &cbWritten, nullptr);
 	if (cbWritten != strlen(buffer))
 	{
-		MessageBox(nullptr, "WriteFile failed(1)", "ConsoleLogger failed",MB_OK);
+		MessageBoxA(nullptr, "WriteFile failed(1)", "ConsoleLogger failed", MB_OK);
 		DisconnectNamedPipe(m_hPipe);
 		CloseHandle(m_hPipe);
 		m_hPipe = INVALID_HANDLE_VALUE;
 		return -1;
 	}
-
 
 	if (buffer_size_x != -1 && buffer_size_y != -1)
 	{
@@ -158,7 +151,7 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 		WriteFile(m_hPipe, buffer, strlen(buffer), &cbWritten, nullptr);
 		if (cbWritten != strlen(buffer))
 		{
-			MessageBox(nullptr, "WriteFile failed(2)", "ConsoleLogger failed",MB_OK);
+			MessageBoxA(nullptr, "WriteFile failed(2)", "ConsoleLogger failed", MB_OK);
 			DisconnectNamedPipe(m_hPipe);
 			CloseHandle(m_hPipe);
 			m_hPipe = INVALID_HANDLE_VALUE;
@@ -166,7 +159,7 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 		}
 	}
 
-	// Send more headers. you can override the AddHeaders() function to 
+	// Send more headers. you can override the AddHeaders() function to
 	// extend this class
 	if (AddHeaders())
 	{
@@ -176,13 +169,12 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 		return -1;
 	}
 
-
 	// send NULL as "end of header"
 	buffer[0] = 0;
 	WriteFile(m_hPipe, buffer, 1, &cbWritten, nullptr);
 	if (cbWritten != 1)
 	{
-		MessageBox(nullptr, "WriteFile failed(3)", "ConsoleLogger failed",MB_OK);
+		MessageBoxA(nullptr, "WriteFile failed(3)", "ConsoleLogger failed", MB_OK);
 		DisconnectNamedPipe(m_hPipe);
 		CloseHandle(m_hPipe);
 		m_hPipe = INVALID_HANDLE_VALUE;
@@ -190,7 +182,6 @@ long CConsoleLogger::Create(const char* lpszWindowTitle/*=NULL*/,
 	}
 	return 0;
 }
-
 
 // Close and disconnect
 long CConsoleLogger::Close(void)
@@ -200,11 +191,10 @@ long CConsoleLogger::Close(void)
 	return DisconnectNamedPipe(m_hPipe);
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // print: print string lpszText with size iSize
 // if iSize==-1 (default) , we'll use strlen(lpszText)
-// 
+//
 // this is the fastest way to print a simple (not formatted) string
 //////////////////////////////////////////////////////////////////////////
 inline int CConsoleLogger::print(const char* lpszText, int iSize/*=-1*/)
@@ -217,7 +207,7 @@ inline int CConsoleLogger::print(const char* lpszText, int iSize/*=-1*/)
 //////////////////////////////////////////////////////////////////////////
 // printf: print a formatted string
 //////////////////////////////////////////////////////////////////////////
-int CConsoleLogger::printf(const char* format,...)
+int CConsoleLogger::printf(const char* format, ...)
 {
 	if (m_hPipe == INVALID_HANDLE_VALUE)
 		return -1;
@@ -230,17 +220,14 @@ int CConsoleLogger::printf(const char* format,...)
 #ifdef WIN32
 	ret = _vsnprintf(tmp, sizeof(tmp) - 1, format, argList);
 #else
-	 		ret = vsnprintf(tmp,sizeof(tmp)-1,format,argList);
+	ret = vsnprintf(tmp, sizeof(tmp) - 1, format, argList);
 #endif
 	tmp[ret] = 0;
 
-
 	va_end(argList);
-
 
 	return _print(tmp, ret);
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 // set the default (CRT) printf() to use this logger
@@ -275,7 +262,6 @@ int CConsoleLogger::ResetDefaultOutput(void)
 	return setvbuf(stdout, nullptr, _IONBF, 0);
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // _print: print helper
 // we use the thread-safe funtion "SafeWriteFile()" to output the data
@@ -285,11 +271,10 @@ int CConsoleLogger::_print(const char* lpszText, int iSize)
 	DWORD dwWritten = (DWORD)-1;
 
 	return (!SafeWriteFile(m_hPipe, lpszText, iSize, &dwWritten, nullptr)
-		       || (int)dwWritten != iSize)
-		       ? -1
-		       : (int)dwWritten;
+		|| (int)dwWritten != iSize)
+		? -1
+		: (int)dwWritten;
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 // Implementation of the derived class: CConsoleLoggerEx
@@ -301,16 +286,15 @@ CConsoleLoggerEx::CConsoleLoggerEx()
 	m_dwCurrentAttributes = COLOR_WHITE | COLOR_BACKGROUND_BLACK;
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // override the _print.
 // first output the "command" (which is COMMAND_PRINT) and the size,
-// and than output the string itself	
+// and than output the string itself
 //////////////////////////////////////////////////////////////////////////
 int CConsoleLoggerEx::_print(const char* lpszText, int iSize)
 {
 	DWORD dwWritten = (DWORD)-1;
-	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize 
+	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize
 	// 32BIT: send DWORD = 4bytes: one byte is the command (COMMAND_PRINT) , and 3 bytes for size
 
 	DWORD command_plus_size = (COMMAND_PRINT << 24) | iSize;
@@ -323,13 +307,12 @@ int CConsoleLoggerEx::_print(const char* lpszText, int iSize)
 	}
 
 	int iRet = (!WriteFile(m_hPipe, lpszText, iSize, &dwWritten, nullptr)
-		           || (int)dwWritten != iSize)
-		           ? -1
-		           : (int)dwWritten;
+		|| (int)dwWritten != iSize)
+		? -1
+		: (int)dwWritten;
 	LeaveCriticalSection();
 	return iRet;
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 // cls: clear screen  (just sends the COMMAND_CLEAR_SCREEN)
@@ -337,12 +320,11 @@ int CConsoleLoggerEx::_print(const char* lpszText, int iSize)
 void CConsoleLoggerEx::cls(void)
 {
 	DWORD dwWritten = (DWORD)-1;
-	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize 
+	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize
 	// 32BIT: send DWORD = 4bytes: one byte is the command (COMMAND_PRINT) , and 3 bytes for size
 	DWORD command = COMMAND_CLEAR_SCREEN << 24;
 	SafeWriteFile(m_hPipe, &command, sizeof(DWORD), &dwWritten, nullptr);
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 // cls(DWORD) : clear screen with specific color
@@ -350,7 +332,7 @@ void CConsoleLoggerEx::cls(void)
 void CConsoleLoggerEx::cls(DWORD color)
 {
 	DWORD dwWritten = (DWORD)-1;
-	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize 
+	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize
 	// 32BIT: send DWORD = 4bytes: one byte is the command (COMMAND_PRINT) , and 3 bytes for size
 	DWORD command = COMMAND_COLORED_CLEAR_SCREEN << 24;
 	EnterCriticalSection();
@@ -365,7 +347,7 @@ void CConsoleLoggerEx::cls(DWORD color)
 void CConsoleLoggerEx::clear_eol(void)
 {
 	DWORD dwWritten = (DWORD)-1;
-	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize 
+	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize
 	// 32BIT: send DWORD = 4bytes: one byte is the command (COMMAND_PRINT) , and 3 bytes for size
 	DWORD command = COMMAND_CLEAR_EOL << 24;
 	SafeWriteFile(m_hPipe, &command, sizeof(DWORD), &dwWritten, nullptr);
@@ -377,7 +359,7 @@ void CConsoleLoggerEx::clear_eol(void)
 void CConsoleLoggerEx::clear_eol(DWORD color)
 {
 	DWORD dwWritten = (DWORD)-1;
-	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize 
+	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize
 	// 32BIT: send DWORD = 4bytes: one byte is the command (COMMAND_PRINT) , and 3 bytes for size
 	DWORD command = COMMAND_COLORED_CLEAR_EOL << 24;
 	EnterCriticalSection();
@@ -386,14 +368,13 @@ void CConsoleLoggerEx::clear_eol(DWORD color)
 	LeaveCriticalSection();
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // gotoxy(x,y) : sets the cursor to x,y location
 //////////////////////////////////////////////////////////////////////////
 void CConsoleLoggerEx::gotoxy(int x, int y)
 {
 	DWORD dwWritten = (DWORD)-1;
-	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize 
+	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize
 	// 32BIT: send DWORD = 4bytes: one byte is the command (COMMAND_PRINT) , and 3 bytes for size
 	DWORD command = COMMAND_GOTOXY << 24;
 	EnterCriticalSection();
@@ -403,11 +384,10 @@ void CConsoleLoggerEx::gotoxy(int x, int y)
 	LeaveCriticalSection();
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // cprintf(attr,str,...) : prints a formatted string with the "attributes" color
 //////////////////////////////////////////////////////////////////////////
-int CConsoleLoggerEx::cprintf(int attributes, const char* format,...)
+int CConsoleLoggerEx::cprintf(int attributes, const char* format, ...)
 {
 	if (m_hPipe == INVALID_HANDLE_VALUE)
 		return -1;
@@ -420,22 +400,19 @@ int CConsoleLoggerEx::cprintf(int attributes, const char* format,...)
 #ifdef WIN32
 	ret = _vsnprintf(tmp, sizeof(tmp) - 1, format, argList);
 #else
-	 		ret = vsnprintf(tmp,sizeof(tmp)-1,format,argList);
+	ret = vsnprintf(tmp, sizeof(tmp) - 1, format, argList);
 #endif
 	tmp[ret] = 0;
 
-
 	va_end(argList);
-
 
 	return _cprint(attributes, tmp, ret);
 }
 
-
 //////////////////////////////////////////////////////////////////////////
 // cprintf(str,...) : prints a formatted string with current color
 //////////////////////////////////////////////////////////////////////////
-int CConsoleLoggerEx::cprintf(const char* format,...)
+int CConsoleLoggerEx::cprintf(const char* format, ...)
 {
 	if (m_hPipe == INVALID_HANDLE_VALUE)
 		return -1;
@@ -448,17 +425,14 @@ int CConsoleLoggerEx::cprintf(const char* format,...)
 #ifdef WIN32
 	ret = _vsnprintf(tmp, sizeof(tmp) - 1, format, argList);
 #else
-	 		ret = vsnprintf(tmp,sizeof(tmp)-1,format,argList);
+	ret = vsnprintf(tmp, sizeof(tmp) - 1, format, argList);
 #endif
 	tmp[ret] = 0;
 
-
 	va_end(argList);
-
 
 	return _cprint(m_dwCurrentAttributes, tmp, ret);
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 // the _cprintf() helper . do the actual output
@@ -466,7 +440,7 @@ int CConsoleLoggerEx::cprintf(const char* format,...)
 int CConsoleLoggerEx::_cprint(int attributes, const char* lpszText, int iSize)
 {
 	DWORD dwWritten = (DWORD)-1;
-	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize 
+	// we assume that in iSize < 2^24 , because we're using only 3 bytes of iSize
 	// 32BIT: send DWORD = 4bytes: one byte is the command (COMMAND_CPRINT) , and 3 bytes for size
 	DWORD command_plus_size = (COMMAND_CPRINT << 24) | iSize;
 	EnterCriticalSection();
@@ -486,9 +460,9 @@ int CConsoleLoggerEx::_cprint(int attributes, const char* lpszText, int iSize)
 	}
 
 	int iRet = (!WriteFile(m_hPipe, lpszText, iSize, &dwWritten, nullptr)
-		           || (int)dwWritten != iSize)
-		           ? -1
-		           : (int)dwWritten;
+		|| (int)dwWritten != iSize)
+		? -1
+		: (int)dwWritten;
 	LeaveCriticalSection();
 	return iRet;
 }

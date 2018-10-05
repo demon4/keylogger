@@ -1,29 +1,4 @@
-// ConsoleLogger_Demo.cpp : Defines the entry point for the console application.
-//
 #include "Console.h"
-/*
-int main(int argc, char* argv[])
-{
-	SetConsoleTitleA("Main Process");
-	printf("Hi , I'm the main-process , and  I'm going to show you 2 more consoles...");
-	CConsoleLoggerEx coloured_console;
-	coloured_console.Create("File Stream");
-
-	coloured_console.printf(" ");
-
-	coloured_console.cprintf(CConsoleLoggerEx::COLOR_WHITE, " ");
-
-	CConsoleLoggerEx coloured_console1;
-
-	coloured_console1.Create("Text Stream");
-
-	coloured_console1.cprintf(" ");
-
-	getchar();
-
-	return 0;
-}*/
-
 #pragma comment (lib, "ws2_32.lib")
 #include <WS2tcpip.h>
 #include <winsock2.h>
@@ -49,19 +24,18 @@ string encode64(string filename);
 string currentDateTime();
 string base64_decode(std::string const& encoded_string);
 string base64_encode(unsigned char const* bytes_to_encode, unsigned int in_len);
-CConsoleLoggerEx text_stream;
 CConsoleLoggerEx file_stream;
+CConsoleLoggerEx cnc_stream;
 static inline bool is_base64(unsigned char c) {
 	return (isalnum(c) || (c == '+') || (c == '/'));
 }
-
 int main()
 {
-	SetConsoleTitleA("Connection Stream");
-	file_stream.Create("File Stream");
-	text_stream.Create("Text Stream");
 	locale swedish("swedish");
 	locale::global(swedish);
+	SetConsoleTitleA("Text Stream");
+	file_stream.Create("File Stream");
+	cnc_stream.Create("Requests Stream");
 	WSADATA data;
 	WORD version = MAKEWORD(2, 2);
 	int wsOk = WSAStartup(version, &data);
@@ -84,7 +58,7 @@ int main()
 		return 66;
 	}
 
-	sockaddr_in client;
+	sockaddr_in client{};
 	int clientLength = sizeof(client);
 	char sizebuf[1024];
 	char typbuf[1024];
@@ -104,9 +78,12 @@ int main()
 		ZeroMemory(hash, 512);
 		ZeroMemory(split_sz, 1024);
 
-		int pre_typ = recvfrom(in, typbuf, 1024, 0, (sockaddr*)&client, &clientLength); // gets type of the sent data
+		auto pre_typ = recvfrom(in, typbuf, 1024, 0, (sockaddr*)&client, &clientLength); // gets type of the sent data
+		if (pre_typ == SOCKET_ERROR) { // checks if size of string was successful
+			cout << "pre_typ error: " << WSAGetLastError() << endl;
+			break;
+		}
 		string type = (string)typbuf;
-
 		if (type == "TEXT") {
 			int pre_bytes = recvfrom(in, sizebuf, 1024, 0, (sockaddr*)&client, &clientLength); // gets string size
 			if (pre_bytes == SOCKET_ERROR) { // checks if size of string was successful
@@ -128,23 +105,29 @@ int main()
 			if (equal(begin(clientIp), end(clientIp), begin(fclientip)))
 			{
 				stringstream temp;
+				temp << "(" << currentDateTime() << ") -> New [Text] recv(Request): from [" << string(clientIp) << "]" << endl;
+
 				for (auto i = buf.begin(); i != buf.end(); ++i) {
-					temp << *i;
+					cout << *i;
 				}
-				temp << "\b";
-				con_print(text_stream, temp.str());
+				cout << "\b";
+
+				//cout << temp.str() << endl;
+				con_print(cnc_stream, temp.str());
 			}
 			else
 			{
-				cout << "(" << currentDateTime() << ") -> New [Text] recvRequest: [" << string(clientIp) << "]";
 				stringstream temp;
-				temp << clientIp << " : "<< "[" << typbuf << "]" << endl; //prints ip, type and message
+				temp << "(" << currentDateTime() << ") -> New [Text] recv(Request): from [" << string(clientIp) << "]" << endl;
+
+				cout << endl << "[ |" << clientIp << "| ] -> "; //prints ip, type and message
 				for (auto i = buf.begin(); i != buf.end(); ++i) {
-					temp << *i;
+					cout << *i;
+					//cout << *i;
 				}
-				temp << "\b";
+				cout << "\b";
 				copy(begin(clientIp), end(clientIp), begin(fclientip));
-				con_print(text_stream, temp.str());
+				con_print(cnc_stream, temp.str());
 			}
 
 			// done getting message from user.
@@ -183,8 +166,12 @@ int main()
 
 			vector<char> kys;
 			kys.resize(size*split + 1);
-
-			cout << client_ip << " : " << "[" << typbuf << "] " << "Incoming file: " << filename << " | Split Size: " << sizebuf << " | Number of splits: " << split_sz << endl;
+			stringstream sf;
+			sf << "(" << currentDateTime() << ") -> New [Data] recvRequest: [" << string(client_ip) << "]" << endl;
+			con_print(file_stream, sf.str());
+			stringstream temp;
+			temp << client_ip << " : " << "[" << typbuf << "] " << "Incoming file: " << filename << " | Split Size: " << sizebuf << " | Number of splits: " << split_sz << endl;
+			con_print(file_stream, temp.str());
 			for (int i = 0; i <= split; ++i) {
 				if (i == 0) {
 					int sendkys = recvfrom(in, &kys[0], size, 0, (sockaddr*)&client, &clientLength);
@@ -204,21 +191,25 @@ int main()
 						cout << "sendkys3 Error: " << WSAGetLastError() << endl;
 					}
 				}
-				cout << setprecision(1) << fixed << ((double)i / split) * 100 << "%\b\b\b\b\b\b";
+				stringstream sss;
+				sss << setprecision(1) << fixed << ((double)i / split) * 100 << "%\b\b\b\b\b\b";
+				con_print(file_stream, sss.str());
 			}
+			stringstream rrr;
 			stringstream ss;
-			cout << "Reconstructing File..." << "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
+			rrr << "Reconstructing File..." << "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b";
 			for (auto f = kys.begin(); f != kys.end(); ++f) { ss << *f; }
 			string base64 = ss.str();
 			decode64(base64, filename);
-			cout << "[RECEIVED FILE: \"" << filename << "\" in (" << float(clock() - begin_time) / CLOCKS_PER_SEC << "s)] ";
+			rrr << "[RECEIVED FILE: \"" << filename << "\" in (" << float(clock() - begin_time) / CLOCKS_PER_SEC << "s)] ";
 			string hash512 = (string)(hash);
 			if ((string)sha512::file(filename) == (string)hash) {
-				cout << "HASH: " << hash512.substr(0, 48) << "....(48 of 512) = CORRECT" << endl;
+				rrr << "HASH: " << hash512.substr(0, 48) << "....(48 of 512) = CORRECT" << endl;
 			}
 			else {
-				cout << "HASH: " << hash512.substr(0, 48) << "....(48 of 512) = FAULTY" << endl;
+				rrr << "HASH: " << hash512.substr(0, 48) << "....(48 of 512) = FAULTY" << endl;
 			}
+			con_print(file_stream, rrr.str());
 			//done getting file from client.
 		}
 	}
@@ -244,10 +235,10 @@ void print_vector(vector<char> v) {
 }
 
 string currentDateTime() {
-	std::time_t t = std::time(nullptr);
-	std::tm tm = *std::localtime(&t);
+	time_t t = std::time(nullptr);
+	tm tm = *std::localtime(&t);
 	stringstream ff;
-	ff << std::put_time(&tm, "%Y-%m-%d-%H.%M.%S");
+	ff << put_time(&tm, "%Y-%m-%d-%H.%M.%S");
 	return ff.str();
 }
 

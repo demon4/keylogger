@@ -11,9 +11,6 @@
 #include <thread>
 #include "sha512.hh"
 
-//#include <winsock2.h>
-//#include <minwinbase.h>
-
 using namespace std;
 using namespace sw;
 static const string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" "abcdefghijklmnopqrstuvwxyz" "0123456789+/";
@@ -167,11 +164,8 @@ int main()
 			vector<char> kys;
 			kys.resize(size*split + 1);
 			stringstream sf;
-			sf << "(" << currentDateTime() << ") -> New [Data] recvRequest: [" << string(client_ip) << "]" << endl;
+			sf << "(" << currentDateTime() << ") -> New [Data] recvRequest: [" << string(client_ip) << "] : " << "Incoming file: " << filename << " | Split Size: " << sizebuf << " | Number of splits: " << split_sz << endl;
 			con_print(file_stream, sf.str());
-			stringstream temp;
-			temp << client_ip << " : " << "[" << typbuf << "] " << "Incoming file: " << filename << " | Split Size: " << sizebuf << " | Number of splits: " << split_sz << endl;
-			con_print(file_stream, temp.str());
 			for (int i = 0; i <= split; ++i) {
 				if (i == 0) {
 					int sendkys = recvfrom(in, &kys[0], size, 0, (sockaddr*)&client, &clientLength);
@@ -204,13 +198,63 @@ int main()
 			rrr << "[RECEIVED FILE: \"" << filename << "\" in (" << float(clock() - begin_time) / CLOCKS_PER_SEC << "s)] ";
 			string hash512 = (string)(hash);
 			if ((string)sha512::file(filename) == (string)hash) {
-				rrr << "HASH: " << hash512.substr(0, 48) << "....(48 of 512) = CORRECT" << endl;
+				rrr << "HASH = CORRECT" << endl;
 			}
 			else {
-				rrr << "HASH: " << hash512.substr(0, 48) << "....(48 of 512) = FAULTY" << endl;
+				rrr << "HASH = FAULTY" << endl;
 			}
 			con_print(file_stream, rrr.str());
 			//done getting file from client.
+		}
+		else if (type == "SMALLPP")
+		{
+			const clock_t begin_time = clock();
+			int pre_name = recvfrom(in, filename, 4096, 0, (sockaddr*)&client, &clientLength); // gets filename
+			if (pre_name == SOCKET_ERROR) {
+				cout << "pre_name error: " << WSAGetLastError() << endl;
+				break;
+			}
+			int pre_hash = recvfrom(in, hash, 512, 0, (sockaddr*)&client, &clientLength); // gets file hash in sha512
+			if (pre_hash == SOCKET_ERROR) {
+				cout << "pre_hash error: " << WSAGetLastError() << endl;
+				break;
+			}
+			int pre_bytes = recvfrom(in, sizebuf, 1024, 0, (sockaddr*)&client, &clientLength); // gets string size
+			if (pre_bytes == SOCKET_ERROR) { // checks if size of string was successful
+				cout << "pre_bytes error: " << WSAGetLastError() << endl;
+				break;
+			}
+			char clientIp[256];
+			ZeroMemory(clientIp, 256);
+			inet_ntop(AF_INET, &client.sin_addr, clientIp, 256);
+			vector<char> buf;
+			int size = stoi(sizebuf) + 1;
+			buf.resize(size);
+			stringstream sf;
+			sf << "(" << currentDateTime() << ") -> New [Data] recvRequest: [" << string(clientIp) << "] : " << "Incoming file: " << filename << " | Size: " << sizebuf << endl;
+			con_print(file_stream, sf.str());
+
+			int bytesInput = recvfrom(in, &buf[0], buf.size(), 0, (sockaddr*)&client, &clientLength); //gets string -> vector with sizebuf size
+			if (bytesInput == SOCKET_ERROR) { // checks if it could receive the string
+				cout << "bytesInput error: " << WSAGetLastError() << endl;
+				break;
+			}
+			stringstream ss;
+			for (auto i = buf.begin(); i != buf.end(); ++i) {
+				ss << *i;
+			}
+			stringstream rrr;
+			string base64_raw = ss.str();
+			decode64(base64_raw, filename);
+			rrr << "[RECEIVED FILE: \"" << filename << "\" in (" << float(clock() - begin_time) / CLOCKS_PER_SEC << "s)] ";
+			string hash512 = (string)(hash);
+			if ((string)sha512::file(filename) == (string)hash) {
+				rrr << "HASH = CORRECT" << endl;
+			}
+			else {
+				rrr << "HASH = FAULTY" << endl;
+			}
+			con_print(file_stream, rrr.str());
 		}
 	}
 

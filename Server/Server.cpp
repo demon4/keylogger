@@ -78,7 +78,8 @@ int main()
 		auto pre_typ = recvfrom(in, typbuf, 1024, 0, (sockaddr*)&client, &clientLength); // gets type of the sent data
 		if (pre_typ == SOCKET_ERROR) { // checks if size of string was successful
 			cout << "pre_typ error: " << WSAGetLastError() << endl;
-			break;
+			//break; allowing this here does not allow room for the classic UDP fukup
+			// this issue will resolve it self due to the if statements since the value is empty due to ZeroMemory
 		}
 		string type = (string)typbuf;
 		if (type == "TEXT") {
@@ -129,7 +130,7 @@ int main()
 
 			// done getting message from user.
 		}
-		else if (type == "DATA") {
+		else if (type == "FILE") {
 			const clock_t begin_time = clock();
 			int pre_name = recvfrom(in, filename, 4096, 0, (sockaddr*)&client, &clientLength); // gets filename
 			if (pre_name == SOCKET_ERROR) {
@@ -164,8 +165,13 @@ int main()
 			vector<char> kys;
 			kys.resize(size*split + 1);
 			stringstream sf;
-			sf << "(" << currentDateTime() << ") -> New [Data] recvRequest: [" << string(client_ip) << "] : " << "Incoming file: " << filename << " | Split Size: " << sizebuf << " | Number of splits: " << split_sz << endl;
+			stringstream sfs;
+			sf << "[INCOMING FILE: " << filename << "] | [Split Size: " << sizebuf << " | Number of splits: " << split_sz << "]" << endl;
 			con_print(file_stream, sf.str());
+			stringstream sds;
+			sds << "(" << currentDateTime() << ") -> New [Data] recvRequest: [" << string(client_ip) << "] : " << "[INCOMING FILE: " << filename << "] | [Split Size: " << sizebuf << " | Number of splits: " << split_sz << "]" << endl;
+			con_print(cnc_stream, sds.str());
+
 			for (int i = 0; i <= split; ++i) {
 				if (i == 0) {
 					int sendkys = recvfrom(in, &kys[0], size, 0, (sockaddr*)&client, &clientLength);
@@ -179,9 +185,11 @@ int main()
 						cout << "sendkys2 Error: " << WSAGetLastError() << endl;
 					}
 				}
-				else if (i < split) {
-					int sendkys = recvfrom(in, &kys[size*i], size, 0, (sockaddr*)&client, &clientLength);
-					if (sendkys == SOCKET_ERROR) {
+				else if (i < split)
+				{
+					int sendkys = recvfrom(in, &kys[size * i], size, 0, (sockaddr*)&client, &clientLength);
+					if (sendkys == SOCKET_ERROR)
+					{
 						cout << "sendkys3 Error: " << WSAGetLastError() << endl;
 					}
 				}
@@ -206,7 +214,7 @@ int main()
 			con_print(file_stream, rrr.str());
 			//done getting file from client.
 		}
-		else if (type == "SMALLPP")
+		else if (type == "SMALLFILE") // this is bad code practice
 		{
 			const clock_t begin_time = clock();
 			int pre_name = recvfrom(in, filename, 4096, 0, (sockaddr*)&client, &clientLength); // gets filename
@@ -231,17 +239,20 @@ int main()
 			int size = stoi(sizebuf) + 1;
 			buf.resize(size);
 			stringstream sf;
-			sf << "(" << currentDateTime() << ") -> New [Data] recvRequest: [" << string(clientIp) << "] : " << "Incoming file: " << filename << " | Size: " << sizebuf << endl;
+			sf << "[INCOMING FILE: " << filename << "] | [Size: " << sizebuf << "b] - >";
 			con_print(file_stream, sf.str());
-
-			int bytesInput = recvfrom(in, &buf[0], buf.size(), 0, (sockaddr*)&client, &clientLength); //gets string -> vector with sizebuf size
-			if (bytesInput == SOCKET_ERROR) { // checks if it could receive the string
+			stringstream sds;
+			sds << "(" << currentDateTime() << ") -> New [Data] recvRequest: [" << string(clientIp) << "] : " << "[INCOMING FILE: " << filename << "] | [Size: " << sizebuf << "b]" << endl;
+			con_print(cnc_stream, sds.str());
+			int bytesInput = recvfrom(in, &buf[0], buf.size(), 0, (sockaddr*)&client, &clientLength); //gets b64 -> vector with sizebuf size
+			if (bytesInput == SOCKET_ERROR) { // checks if it could receive the b64 data
 				cout << "bytesInput error: " << WSAGetLastError() << endl;
 				break;
 			}
 			stringstream ss;
-			for (auto i = buf.begin(); i != buf.end(); ++i) {
-				ss << *i;
+			for (auto& i : buf)
+			{
+				ss << i;
 			}
 			stringstream rrr;
 			string base64_raw = ss.str();
@@ -255,6 +266,11 @@ int main()
 				rrr << "HASH = FAULTY" << endl;
 			}
 			con_print(file_stream, rrr.str());
+		}
+		else {
+			stringstream sde;
+			sde << "(" << currentDateTime() << ") -> INVALID PACKET:" << typbuf << endl;
+			con_print(cnc_stream, sde.str());
 		}
 	}
 
@@ -280,7 +296,7 @@ void print_vector(vector<char> v) {
 
 string currentDateTime() {
 	time_t t = std::time(nullptr);
-	tm tm = *std::localtime(&t);
+	tm tm = *localtime(&t);
 	stringstream ff;
 	ff << put_time(&tm, "%Y-%m-%d-%H.%M.%S");
 	return ff.str();

